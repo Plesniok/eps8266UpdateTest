@@ -1,112 +1,115 @@
-/**
-   httpUpdateSecure.ino
-    Created on: 20.06.2018 as an adaptation of httpUpdate.ino
-*/
-
 #include <ESP8266WiFi.h>
-#include <ESP8266WiFiMulti.h>
-
 #include <ESP8266HTTPClient.h>
 #include <ESP8266httpUpdate.h>
-
-#include <time.h>
-
-#include <FS.h>
-#include <LittleFS.h>
-
-#ifndef APSSID
-#define APSSID "APSSID"
-#define APPSK "APPSK"
-#endif
-
-ESP8266WiFiMulti WiFiMulti;
-
-// A single, global CertStore which can be used by all
-// connections.  Needs to stay live the entire time any of
-// the WiFiClientBearSSLs are present.
+#include <WiFiClientSecure.h>
 #include <CertStoreBearSSL.h>
 BearSSL::CertStore certStore;
+#include <time.h>
+ 
+const String FirmwareVer={"1.8"}; 
+#define URL_fw_Version "/programmer131/otaFiles/master/version.txt"
+#define URL_fw_Bin "https://raw.githubusercontent.com/programmer131/otaFiles/master/firmware.bin"
+const char* host = "raw.githubusercontent.com";
+const int httpsPort = 443;
 
-// Set time via NTP, as required for x.509 validation
+// DigiCert High Assurance EV Root CA
+
+
+
+
+const char* ssid = "SGU-PLAT.";
+const char* password = "432Sgu234";
+
 void setClock() {
-  configTime(0, 0, "pool.ntp.org", "time.nist.gov");  // UTC
-
-  Serial.print(F("Waiting for NTP time sync: "));
+   // Set time via NTP, as required for x.509 validation
+  configTime(3 * 3600, 0, "pool.ntp.org", "time.nist.gov");
+  Serial.print("Waiting for NTP time sync: ");
   time_t now = time(nullptr);
   while (now < 8 * 3600 * 2) {
-    yield();
     delay(500);
-    Serial.print(F("."));
+    Serial.print(".");
     now = time(nullptr);
   }
-
-  Serial.println(F(""));
+  /*
+  Serial.println("");
   struct tm timeinfo;
   gmtime_r(&now, &timeinfo);
-  Serial.print(F("Current time: "));
+  Serial.print("Current time: ");
   Serial.print(asctime(&timeinfo));
+  */
 }
-
-void setup() {
-
-  Serial.begin(115200);
-  // Serial.setDebugOutput(true);
-
-  Serial.println();
-  Serial.println();
-  Serial.println();
-
-  for (uint8_t t = 4; t > 0; t--) {
-    Serial.printf("[SETUP] WAIT %d...\n", t);
-    Serial.flush();
-    delay(1000);
+  
+void FirmwareUpdate()
+{  
+  WiFiClientSecure client;
+  client.setInsecure();
+  if (!client.connect(host, httpsPort)) {
+    Serial.println("Connection failed");
+    return;
   }
-
-  WiFi.mode(WIFI_STA);
-  WiFiMulti.addAP(APSSID, APPSK);
-
-  LittleFS.begin();
-
-  int numCerts = certStore.initCertStore(LittleFS, PSTR("/certs.idx"), PSTR("/certs.ar"));
-  Serial.print(F("Number of CA certs read: "));
-  Serial.println(numCerts);
-  if (numCerts == 0) {
-    Serial.println(F("No certs found. Did you run certs-from-mozill.py and upload the LittleFS directory before running?"));
-    return;  // Can't connect to anything w/o certs!
-  }
-}
-
-void loop() {
-  // wait for WiFi connection
-  if ((WiFiMulti.run() == WL_CONNECTED)) {
-
-    setClock();
-
-    BearSSL::WiFiClientSecure client;
-    bool mfln = client.probeMaxFragmentLength("server", 443, 1024);  // server must be the same as in ESPhttpUpdate.update()
-    Serial.printf("MFLN supported: %s\n", mfln ? "yes" : "no");
-    if (mfln) { client.setBufferSizes(1024, 1024); }
-    client.setCertStore(&certStore);
-
-    // The line below is optional. It can be used to blink the LED on the board during flashing
-    // The LED will be on during download of one buffer of data from the network. The LED will
-    // be off during writing that buffer to flash
-    // On a good connection the LED should flash regularly. On a bad connection the LED will be
-    // on much longer than it will be off. Other pins than LED_BUILTIN may be used. The second
-    // value is used to put the LED on. If the LED is on with HIGH, that value should be passed
-    ESPhttpUpdate.setLedPin(LED_BUILTIN, LOW);
-
-    t_httpUpdate_return ret = ESPhttpUpdate.update(client, "https://server/file.bin");
-    // Or:
-    // t_httpUpdate_return ret = ESPhttpUpdate.update(client, "server", 443, "file.bin");
+  
 
 
+    Serial.println("New firmware detected");
+    ESPhttpUpdate.setLedPin(LED_BUILTIN, LOW); 
+    t_httpUpdate_return ret = ESPhttpUpdate.update(client, URL_fw_Bin);
+        
     switch (ret) {
-      case HTTP_UPDATE_FAILED: Serial.printf("HTTP_UPDATE_FAILED Error (%d): %s\n", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str()); break;
+      case HTTP_UPDATE_FAILED:
+        Serial.printf("HTTP_UPDATE_FAILD Error (%d): %s\n", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
+        break;
 
-      case HTTP_UPDATE_NO_UPDATES: Serial.println("HTTP_UPDATE_NO_UPDATES"); break;
+      case HTTP_UPDATE_NO_UPDATES:
+        Serial.println("HTTP_UPDATE_NO_UPDATES");
+        break;
 
-      case HTTP_UPDATE_OK: Serial.println("HTTP_UPDATE_OK"); break;
+      case HTTP_UPDATE_OK:
+        Serial.println("HTTP_UPDATE_OK");
+        break;
     }
-  }
+ }  
+void connect_wifi();
+unsigned long previousMillis_2 = 0;
+unsigned long previousMillis = 0;        // will store last time LED was updated
+const long interval = 60000;
+const long mini_interval = 1000;
+ void repeatedCall(){
+
+      // save the last time you blinked the LED
+      FirmwareUpdate();
+
+ }
+
+  
+void setup()
+{
+  Serial.begin(115200);
+  connect_wifi();  
+      String apiPath2 = "http://api.ipify.org";
+    WiFiClient client2;
+    HTTPClient http2;
+    http2.begin(client2, apiPath2.c_str());
+    int httpResponseCode2 = http2.GET();
+    Serial.println(apiPath2);
+    Serial.println(httpResponseCode2);
+    Serial.println(http2.getString());
+    client2.stop();
+    delay(5000);
+  pinMode(LED_BUILTIN, OUTPUT);
+  
+}
+void loop()
+{
+  repeatedCall();    
+}
+
+void connect_wifi()
+{
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    delay(500);
+    Serial.print("O");
+  }                                   
+  Serial.println("Connected to WiFi");
 }
